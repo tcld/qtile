@@ -757,3 +757,213 @@ class DropDown(configurable.Configurable):
                     opacity=self.opacity,
                     on_focus_lost_hide=self.on_focus_lost_hide,
                     warp_pointer=self.warp_pointer,)
+
+
+class Theme:
+    """Define a theme.
+    The theme will be set up from an .Xresources-file or a dictionary of
+    colors. The default theming will use a maximum of 16 colors.
+
+    TODO:
+        1. Make use of colors in qtile.config.theme.
+        2. Allow hot-swapping themes.
+           When the global theme is switched, everything should be notified.
+
+    ===== Widgets
+    -defined in: config.widget_defaults
+    
+    ===== Extensions
+    -defined in: config.extension_defaults
+    
+    ===== Drawer
+    -completely separate classes, defined in drawer.py
+
+    ===== Bar
+    -CommandObject->Gap->Bar, Configurable->Bar
+
+    ===== Layouts
+    -implemented by every layout itself
+
+    Parameters
+    ==========
+    source:
+        Path to an .Xresources-like file or a dictionary of names 'colorX' (for
+        an .Xresources-file X should be in [0,15]) mapped to a color in the
+        format '#RRGGBB'.
+        Falls back to the users ~/.Xresources.
+        Examples:
+            '~/.cache/wal/colors.Xresources'
+            { 'color0': '#ff0000', 'color12': '#888888' }
+            [ '#ff0000', '#888888' ]  # (the colors will be numbered starting
+                                         from 0 automatically)
+    purpose_to_index:
+        Mapped purpose to color name of the form 'colorX' with 'X' being a
+        number.
+        This acts as a map of overrides, so not every entry needs to be
+        present. Can be left empty for the default mapping.
+        Example:
+            { 'widget_background': 'color2', 'groupbox_urgent_text': 'color6' }
+    """
+    def __init__(self, source='~/.Xresources', purpose_to_index=dict()):
+        self._default_index_to_color = {
+            'color0': '#000000',
+        }
+
+        # NOTE: These are all the colors used by Qtile as of 2020-12-06 (54230ed)
+        self._default_purpose_to_index = {
+            # widget colors (_Widget, _TextBox and all subclasses)
+            'widget_background': 'color0',  # all widgets; defaults to bar.background if None
+            'widget_foreground': 'color7',  # all _TextBox-widgets
+            'groupbox_block_highlight_text_color': None,
+            'groupbox_active': None,
+            'groupbox_inactive': None,
+            'groupbox_this_current_screen_border': None,
+            'groupbox_this_screen_border': None,
+            'groupbox_other_current_screen_border': None,
+            'groupbox_other_screen_border': None,
+            'groupbox_highlight_color': None,
+            'groupbox_urgent_text': None,
+            'groupbox_urgent_border': None,
+            'khal_calendar_reminder_color': None,
+            'khal_calendar_foreground': None,  # why does this exist, it's a _TextBox?
+            'battery_low_foreground': None,
+            'checkupdates_color_no_updates': None,
+            'checkupdates_color_have_updates': None,
+            'chord_chords_colors': None,
+            'cmus_play_color': None,
+            'cmus_no_play_color': None,
+            'moc_play_color': None,
+            'moc_no_play_color': None,
+            'currentscreen_active_color': None,
+            'currentscreen_inactive_color': None,
+            'disk_free_warn_color': None,
+            'graph_graph_color': None,
+            'graph_fill_color': None,
+            'graph_border_color': None,
+            'keyboard_kbdd_colors': None,  # this would require a color per keyboard layout in a list (or None)
+            'maildir_empty_color': None,
+            'maildir_nonempty_color': None,
+            'mpd2_color_progress': None,
+            'notify_foreground_urgent': None,
+            'notify_foreground_low': None,
+            'pomodoro_color_inactive': None,
+            'pomodoro_color_active': None,
+            'pomodoro_color_break': None,
+            'prompt_cursor_color': None,
+            'prompt_visual_bell_color': None,
+            'thermalsensor_foreground_alter': None,
+            'sep_foreground': None,  # not a _TextBox
+            'spacer_background': None,  # why does this exist, it's a _Widget?
+            'tasklist_foreground': None,  # not a _TextBox
+            'tasklist_border': None,
+            'tasklist_urgent_border': None,
+            'tasklist_unfocused_border': None,
+            'textbox_fontshadow': None,
+            'textbox_foreground': None,  # why does this exist, it's a _TextBox?
+            'window_count_fontshadow': None,
+            'window_count_foreground': None,  # why does this exist, it's a _TextBox?
+
+            # extension colors (_Extension and all subclasses)
+            'extension_background': 'color0',
+            'extension_foreground': 'color7',
+            'extension_selected_background': 'color6',
+            'extension_selected_foreground': 'color7',
+
+            # drawer
+            'textlayout_color': None,
+            'textframe_border_color': None,
+            'textframe_highlight_color': None,
+
+            # bar
+            'bar_background': 'color0',
+
+            # layout
+            'border_normal': 'color0',    # Bsp, Columns, Floating, Matrix, RatioTile, Stack, Tile, VerticalTile, MonadTall
+            'border_focus': 'color6',     # Bsp, Columns, Floating, Matrix, RatioTile, Stack, Tile, VerticalTile, MonadTall
+            'border_normal_stack': None,  # Columns
+            'border_focus_stack': None,   # Columns
+            'treetab_bg_color': None,
+            'treetab_active_bg': None,
+            'treetab_active_fg': None,
+            'treetab_inactive_bg': None,
+            'treetab_inactive_fg': None,
+            'treetab_fontshadow': None,
+            'treetab_section_fg': None,
+            # 'treetab_sections': None,  # this might not actually be a color
+            # no colors: Max, Slice, Zoomy
+        }
+
+        self._purpose_to_index = None
+        self._index_to_color = None
+        self.reset()
+        self.update(source, purpose_to_index)
+
+    def _update_index_to_color(self, source):
+        """Reload colors from some source. This does *not* change any colors."""
+        index_to_color = dict()
+        if isinstance(source, dict):
+            index_to_color = source
+        elif isinstance(source, str):
+            self._path = os.path.expanduser(source)
+            index_to_color = self._load_xresources()
+            if len(index_to_color) == 0:
+                index_to_color = self._load_json()
+        elif isinstance(source, list):
+            index_to_color = {'color' + str(source.index(c)): c for c in source}
+        else:  # not supported
+            # TODO: Maybe write something to the log?
+            pass
+        self._index_to_color.update(index_to_color)
+
+    def _update_purpose_to_index(self, purpose_to_index):
+        """Update the mapping currently in use. This does *not* change any
+        colors.
+        """
+        self._purpose_to_index.update(purpose_to_index)
+
+    def _update_purpose_to_color(self):
+        colors = {k: self._index_to_color.get(v, None) for (k, v) in self._purpose_to_index.items()}
+        self.__dict__.update(colors)  # make entries available as properties
+
+    def reset(self):
+        self._purpose_to_index = self._default_purpose_to_index.copy()
+        self._index_to_color = self._default_index_to_color.copy()
+        self._update_purpose_to_color()
+
+    def update(self, source='~/.Xresources', purpose_to_index=dict()):
+        """Update the used colors."""
+        self._update_index_to_color(source)
+        self._update_purpose_to_index(purpose_to_index)
+        self._update_purpose_to_color()
+
+    def _load_xresources(self):
+        """Try to read an .Xresources-file."""
+        import re
+        try:
+            _file = open(self._path, 'r')
+            lines = _file.readlines()
+            _file.close()
+            # TODO: Check whether there are other possible formats for .Xresources
+            r = re.compile('^.{,2}(color\d+):\W+(#[0-9a-fA-F]+)')
+            index_to_color = map(lambda l: r.search(l), filter(lambda l: r.match(l), lines))
+            return {c.group(1): c.group(2) for c in index_to_color}
+        except FileNotFoundError:
+            return dict()
+
+    def _load_json(self):
+        """Try to read pywal-output or just assume a dictionary ready for
+        proper use.
+        """
+        import json
+        try:
+            _file = open(self._path, 'r')
+            lines = _file.read()
+            _file.close()
+            index_to_color = json.loads(lines)
+            if 'colors' in index_to_color:  # pywal
+                return index_to_color['colors']
+            else:
+                return index_to_color
+        except (FileNotFoundError, json.decoder.JSONDecodeError):
+            return dict()
+

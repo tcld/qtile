@@ -48,6 +48,7 @@ class Config:
         "widget_defaults",
         "extension_defaults",
         "bring_front_click",
+        "theme",
         "wmname",
     ]
 
