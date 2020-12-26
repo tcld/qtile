@@ -55,12 +55,43 @@ def max_config(x):
     return no_xinerama(pytest.mark.parametrize("manager", [MaxConfig], indirect=True)(x))
 
 
+class MaxLayeredConfig(Config):
+    auto_fullscreen = True
+    groups = [
+        libqtile.config.Group('a'),
+        libqtile.config.Group('b'),
+        libqtile.config.Group('c'),
+        libqtile.config.Group('d')
+    ]
+    layouts = [
+        layout.Max(only_focused=False)
+    ]
+    floating_layout = libqtile.layout.floating.Floating()
+    keys = []
+    mouse = []
+    screens = []
+
+
+def maxlayered_config(x):
+    return no_xinerama(pytest.mark.parametrize('manager', [MaxLayeredConfig], indirect=True)(x))
+
+
 @max_config
 def test_max_simple(manager):
     manager.test_window("one")
-    assert manager.c.layout.info()["clients"] == ["one"]
+    assert [w['name'] for w in manager.c.windows()] == ['one']
+    manager.test_window('two')
+    assert manager.c.layout.info()["clients"] == ["one", "two"]
+    assert [w['name'] for w in manager.c.windows()] == ['one', 'two']
+
+
+@maxlayered_config
+def test_layered_max_simple(manager):
+    manager.test_window('one')
+    assert [w['name'] for w in manager.c.windows()] == ['one']
     manager.test_window("two")
     assert manager.c.layout.info()["clients"] == ["one", "two"]
+    assert [w['name'] for w in manager.c.windows()] == ['one', 'two']
 
 
 @max_config
@@ -69,19 +100,54 @@ def test_max_updown(manager):
     manager.test_window("two")
     manager.test_window("three")
     assert manager.c.layout.info()["clients"] == ["one", "two", "three"]
+    assert [w['name'] for w in manager.c.windows()] == ['one', 'two', 'three']
     manager.c.layout.up()
     assert manager.c.groups()["a"]["focus"] == "two"
+    assert [w['name'] for w in manager.c.windows()] == ['three', 'one', 'two']
     manager.c.layout.down()
     assert manager.c.groups()["a"]["focus"] == "three"
+    assert [w['name'] for w in manager.c.windows()] == ['one', 'two', 'three']
+
+
+@maxlayered_config
+def test_layered_max_updown(manager):
+    manager.test_window('one')
+    manager.test_window('two')
+    manager.test_window('three')
+    assert manager.c.layout.info()['clients'] == ['one', 'two', 'three']
+    assert [w['name'] for w in manager.c.windows()] == ['one', 'two', 'three']
+    manager.c.layout.up()
+    assert manager.c.groups()['a']['focus'] == 'two'
+    assert [w['name'] for w in manager.c.windows()] == ['three', 'one', 'two']
+    manager.c.layout.up()
+    assert manager.c.groups()['a']['focus'] == 'one'
+    assert [w['name'] for w in manager.c.windows()] == ['two', 'three', 'one']
+    manager.c.layout.down()
+    assert manager.c.groups()['a']['focus'] == 'two'
+    assert [w['name'] for w in manager.c.windows()] == ['three', 'one', 'two']
+    manager.c.layout.down()
+    assert manager.c.groups()['a']['focus'] == 'three'
+    assert [w['name'] for w in manager.c.windows()] == ['one', 'two', 'three']
+
+
+def max_remove(manager):
+    manager.test_window("one")
+    two = manager.test_window("two")
+    assert manager.c.layout.info()["clients"] == ["one", "two"]
+    assert [w['name'] for w in manager.c.windows()] == ['one', 'two']
+    manager.kill_window(two)
+    assert manager.c.layout.info()["clients"] == ["one"]
+    assert [w['name'] for w in manager.c.windows()] == ['one']
 
 
 @max_config
 def test_max_remove(manager):
-    manager.test_window("one")
-    two = manager.test_window("two")
-    assert manager.c.layout.info()["clients"] == ["one", "two"]
-    manager.kill_window(two)
-    assert manager.c.layout.info()["clients"] == ["one"]
+    max_remove(manager)
+
+
+@maxlayered_config
+def test_layered_max_remove(manager):
+    max_remove(manager)
 
 
 @max_config
@@ -97,8 +163,30 @@ def test_max_window_focus_cycle(manager):
 
     # test preconditions
     assert manager.c.layout.info()['clients'] == ['one', 'two', 'three']
+    assert [w['name'] for w in manager.c.windows()] == ['one', 'two', 'float1', 'float2', 'three']
     # last added window has focus
-    assert_focused(manager, "three")
+    assert_focused(manager, 'three')
+
+    # assert window focus cycle, according to order in layout
+    assert_focus_path(manager, 'float1', 'float2', 'one', 'two', 'three')
+
+
+@maxlayered_config
+def test_layered_max_window_focus_cycle(manager):
+    # setup 3 tiled and two floating clients
+    manager.test_window('one')
+    manager.test_window('two')
+    manager.test_window('float1')
+    manager.c.window.toggle_floating()
+    manager.test_window('float2')
+    manager.c.window.toggle_floating()
+    manager.test_window('three')
+
+    # test preconditions
+    assert manager.c.layout.info()['clients'] == ['one', 'two', 'three']
+    assert [w['name'] for w in manager.c.windows()] == ['one', 'two', 'float1', 'float2', 'three']
+    # last added window has focus
+    assert_focused(manager, 'three')
 
     # assert window focus cycle, according to order in layout
     assert_focus_path(manager, 'float1', 'float2', 'one', 'two', 'three')

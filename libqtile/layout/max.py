@@ -31,7 +31,8 @@ class Max(_SimpleLayoutBase):
     commands to switch to next and previous windows in the stack.
     """
 
-    defaults = [("name", "max", "Name of this layout.")]
+    defaults = [("name", "max", "Name of this layout."),
+                ("only_focused", True, "Only draw the focused window")]
 
     def __init__(self, **config):
         super().__init__(**config)
@@ -41,10 +42,19 @@ class Max(_SimpleLayoutBase):
         return super().clone(group)
 
     def add(self, client):
-        return super().add(client, 1)
+        ret = self.clients.add(client, 1)
+        self._layer_clients(self.clients.current_index)
+        return ret
+
+    def remove(self, client):
+        ret = self.clients.remove(client)
+        client = self.clients.current_client
+        if client:
+            self._layer_clients(self.clients.current_index)
+        return ret
 
     def configure(self, client, screen_rect):
-        if self.clients and client is self.clients.current_client:
+        if not self.only_focused or (self.clients and client is self.clients.current_client):
             client.place(
                 screen_rect.x,
                 screen_rect.y,
@@ -57,8 +67,25 @@ class Max(_SimpleLayoutBase):
         else:
             client.hide()
 
-    cmd_previous = _SimpleLayoutBase.previous
-    cmd_next = _SimpleLayoutBase.next
+    def _layer_clients(self, index):
+        order = self.clients[index+1:] + self.clients[:index+1]
+        self.group.qtile.change_layers([w.window.wid for w in order])
+
+    def cmd_previous(self):
+        if self.clients.current_client is None:
+            return
+        client = self.focus_previous(self.clients.current_client) or self.focus_last()
+        if client:
+            self._layer_clients(self.clients.index(client))
+        self.group.focus(client, True)
+
+    def cmd_next(self):
+        if self.clients.current_client is None:
+            return
+        client = self.focus_next(self.clients.current_client) or self.focus_first()
+        if client:
+            self._layer_clients(self.clients.index(client))
+        self.group.focus(client, True)
 
     cmd_up = cmd_previous
     cmd_down = cmd_next

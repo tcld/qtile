@@ -470,6 +470,35 @@ class Qtile(CommandObject):
         windows = [wid for wid, c in self.windows_map.items() if c.group]
         self.core.update_client_order(windows)
 
+    def change_layers(self, wids):
+        """Change the stacking order of a list of windows to match the given list.
+        E.g.:
+        [1, 2, 3, 4, 5] <-- current stacking order
+        [4, 2,    1] <-- windows given to us
+        [4, 2, 3, 1, 5] <-- resulting stacking order
+        """
+        # TODO: This ignores _NET_WM-flags of all windows. Instead we should rotate the flags - read their values as the windows have them currently, then reorder, then overwrite the flags with what we read.
+        order = list(self.windows_map.keys())
+        try:
+            indices = [order.index(w) for w in wids]
+            indices.sort()
+        except ValueError:
+            return
+
+        mapping = {w: self.windows_map.pop(w) for w in wids}
+        keys = list(self.windows_map.keys())
+        values = list(self.windows_map.values())
+        for (i, wid) in zip(indices, wids):
+            keys.insert(i, wid)
+            values.insert(i, mapping[wid])
+
+        self.windows_map.clear()
+        self.windows_map.update({x: values[i] for i, x in enumerate(keys)})
+        if order != list(self.windows_map.keys()):
+            for w in list(self.windows_map.values())[indices[0]:]:
+                w.window.configure(stackmode=StackMode.Above)
+            self.update_client_order()
+
     def change_layer(self, wid, up=True, do=LayerChange.Auto):
         """Raise a window above its peers or move it below them, depending on 'up'.
         Raising a normal window will not lift it above pinned windows etc.

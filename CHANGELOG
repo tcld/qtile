@@ -48,6 +48,8 @@ Qtile X.X.X, released XXXX-XX-XX:
           twice removes the flag
         - added `cmd_raise_client` and `cmd_lower_client` to Windows so they
           can be shifted along z 
+        - added `only_focused` setting to Max-layout, allowing to draw multiple
+          clients on top of each other when set to False
     !!! warning !!!
         - When (re)starting, Qtile passes its state to the new process in a
           file now, where previously it passed state directly as a string. This
