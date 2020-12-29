@@ -471,13 +471,15 @@ class Qtile(CommandObject):
         self.core.update_client_order(windows)
 
     def change_layers(self, wids):
-        """Change the stacking order of a list of windows to match the given list.
+        """Change the stacking order of a list of windows to match the given
+        list.
+        This will also shift above/below-flags as necessary, so no window
+        violates the current stacking order.
         E.g.:
         [1, 2, 3, 4, 5] <-- current stacking order
         [4, 2,    1] <-- windows given to us
         [4, 2, 3, 1, 5] <-- resulting stacking order
         """
-        # TODO: This ignores _NET_WM-flags of all windows. Instead we should rotate the flags - read their values as the windows have them currently, then reorder, then overwrite the flags with what we read.
         order = list(self.windows_map.keys())
         try:
             indices = [order.index(w) for w in wids]
@@ -485,12 +487,20 @@ class Qtile(CommandObject):
         except ValueError:
             return
 
+        # read in current flags in order
+        flags = []
+        for i in indices:
+            c = self.windows_map[order[i]]
+            flags.append((c.window.net_wm_state_below, c.window.net_wm_state_above))
+
         mapping = {w: self.windows_map.pop(w) for w in wids}
         keys = list(self.windows_map.keys())
         values = list(self.windows_map.values())
-        for (i, wid) in zip(indices, wids):
+        for (i, wid, f) in zip(indices, wids, flags):
             keys.insert(i, wid)
             values.insert(i, mapping[wid])
+            mapping[wid].window.net_wm_state_below = f[0]
+            mapping[wid].window.net_wm_state_above = f[1]
 
         self.windows_map.clear()
         self.windows_map.update({x: values[i] for i, x in enumerate(keys)})
